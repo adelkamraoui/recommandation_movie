@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>diversified films</title>
+</head>
+<body>
+	<table>
+		<thead>
+			<tr>
+				<th>movie Id</th>
+				<th>title</th>
+                <th>genre</th>
+                
+			</tr>
+		</thead>
+		<tbody>
+			{% for index, row in diversified.iterrows() %}
+			<tr>
+				<td>{{ row['movieId'] }}</td>
+				<td>{{ row['title'] }}</td>
+                <td>{{ row['genres'] }}</td>
+				<td><img src="{{ row['urls'] }}" alt="Movie Poster"></td>
+			</tr>
+			{% endfor %}
+		</tbody>
+	</table>
+    
+</body>
+</html>

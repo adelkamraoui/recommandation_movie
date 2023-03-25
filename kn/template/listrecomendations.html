@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>films recommanded for you</title>
+</head>
+<body>
+	<table>
+		<thead>
+			<tr>
+				<th>movie Id</th>
+				<th>title</th>
+                <th>genre</th>
+                
+			</tr>
+		</thead>
+		<tbody>
+			{% for index, row in predictions.iterrows() %}
+			<tr>
+				<td>{{ row['movieId'] }}</td>
+				<td>{{ row['title'] }}</td>
+                <td>{{ row['genres'] }}</td>
+				<td><img src="{{ row['urls'] }}" alt="Movie Poster"></td>
+			</tr>
+			{% endfor %}
+		</tbody>
+	</table>
+    <h1><a href="/allfilms/{{id}}"> rate new films</a></h1>
+	<h1><a href="/diver/{{id}}"> des films diversifées</a></h1>
+</body>
+</html>
