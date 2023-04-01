@@ -19,14 +19,134 @@ from urllib import request
 import PySimpleGUI as sg
 import os
 from flask import Flask, render_template, request
-from test import recommend_movies,remove_year,suggest_diverse_movies
+from test import recommend_movies,remove_year,suggest_diverse_movies,tuple_list_to_dataframe,dataframe_to_tuple_list,get_movie_title,get_movie_trailer
 import requests
+import time
+from flask import Flask, render_template, request, session, redirect, url_for
+
 app = Flask(__name__,template_folder='template')
+app.secret_key = 'secret_key'
 field_names = ['userId', 'movieId', 'rating',
                'timestamp']	
+
+
+users = {}
+with open('user_credentials.csv') as f:
+       for line in f.readlines():
+        user_id, username, password = line.strip().split(',')
+        users[username] = (user_id, password)
+
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    with open('user_credentials.csv') as f:
+            for line in f.readlines():
+                user_id, username, password = line.strip().split(',')
+                users[username] = (user_id, password)
+
+        
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        if username in users and users[username][1] == password:
+            session['username'] = username
+            session['user_id'] = users[username][0]
+            return redirect(url_for('main'))
+        else:
+            error = 'Invalid username or password'
+            return render_template('login.html', error=error)
+    else:
+        return render_template('login.html')
+
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    with open('user_credentials.csv', 'r') as f:
+        reader = csv.reader(f)
+        headers = next(reader)
+        max_id = max(int(row[0]) for row in reader)
+    
+    if request.method == 'POST':
+        # Generate the user ID as the maximum user ID plus one
+        user_id = max_id + 1
+        username = request.form['username']
+        password = request.form['password']
+        
+        # Check if the username is already taken
+        with open('user_credentials.csv', 'r') as f:
+            reader = csv.reader(f)
+            headers = next(reader)
+            for row in reader:
+                if row[1] == username:
+                    error = f'Username {username} is already taken'
+                    return render_template('signin.html', error=error)
+        
+        # Add the new user to the CSV file
+        with open('user_credentials.csv', 'a', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([user_id, username, password])
+        
+        # Redirect the user to the login page
+        return redirect(url_for('showfilms', id=user_id))
+
+    else:
+        return render_template('signin.html', max_id=max_id+1)
+
 @app.route('/')
-def index():
-    return render_template('nsiyi.html')
+def main():
+    if 'username' in session:
+
+        user_id = session['user_id']
+        userIdd=int(user_id)
+        rating = pd.read_csv('/home/adel/Desktop/kn/ratings.csv')
+        movie = pd.read_csv('/home/adel/Desktop/kn/movies.csv')
+        df = pd.merge(rating, movie, on='movieId')
+        eda_rating = pd.DataFrame(df.groupby('title')['rating'].mean())
+        eda_rating['count of ratings'] = pd.DataFrame(df.groupby('title')['rating'].count())
+        mtrx_df = rating.pivot(index = 'userId', columns ='movieId', values = 'rating').fillna(0)
+        mtrx = mtrx_df.to_numpy()
+        ratings_mean = np.mean(mtrx, axis = 1)
+        normalized_mtrx = mtrx - ratings_mean.reshape(-1, 1)
+        U, sigma, Vt = svds(normalized_mtrx, k = 50)
+        sigma = np.diag(sigma)
+        all_predicted_ratings = np.dot(np.dot(U, sigma), Vt) + ratings_mean.reshape(-1, 1)
+        preds_df = pd.DataFrame(all_predicted_ratings, columns = mtrx_df.columns)
+        already_rated, predictions = recommend_movies(preds_df,userIdd, movie, rating, 10)
+        
+        print(already_rated.head(10))
+        print(predictions)
+        movie_data = predictions
+
+        poster_urls = []
+        api_key = 'ccfc2af2a0cd4597bf0472fab1af2f02'  # Replace with your actual TMDb API key
+
+        for prediction in predictions['title']:
+            pre=remove_year(prediction)
+            url = f'https://api.themoviedb.org/3/search/movie?api_key={api_key}&query={pre}'
+            response = requests.get(url)
+            data = response.json()
+            if data['total_results'] > 0:
+                poster_path = data['results'][0]['poster_path']
+                poster_url = f'https://image.tmdb.org/t/p/w500/{poster_path}'
+                print("+1")
+                poster_urls.append(poster_url)
+            else:
+                poster_url = 'https://i.quotev.com/b2gtjqawaaaa.jpg'  # Replace with your actual error image path
+                poster_urls.append(poster_url)    
+                print("+1 taa errror")
+
+        predictions['urls']=poster_urls        
+        print(predictions)
+        return render_template('listrecomendations.html', predictions=predictions,id=user_id,poster_urls=poster_urls)
+
+            
+    else:
+        return redirect(url_for('login'))
+#@app.route('/')
+#def index():
+ #   return render_template('nsiyi.html')
+
 @app.route('/recomfilms')
 def enteridrecom():
     return render_template('recommand.html')
@@ -65,15 +185,38 @@ def showfilms(id):
     return render_template('films.html',movie=films_to_display,idd=idd,num_pages=num_pages, current_page=page,search=search)
 @app.route('/allfilms/<int:id>/<int:movieId>')
 def ratingtemp(id,movieId):
+    api_key = 'ccfc2af2a0cd4597bf0472fab1af2f02'
     idd=id
     print(idd)
+    title=get_movie_title(movieId)
+    pre=remove_year(title)
+    url = f'https://api.themoviedb.org/3/search/movie?api_key={api_key}&query={pre}'
+    response = requests.get(url)
+    data = response.json()
+    if data['total_results'] > 0:
+        poster_path = data['results'][0]['poster_path']
+        poster_url = f'https://image.tmdb.org/t/p/w500/{poster_path}'
+        print("+1")
+        
+    else:
+        poster_url = 'https://i.quotev.com/b2gtjqawaaaa.jpg'  # Replace with your actual error image path
+            
+        print("+1 taa errror")
+
     movieidd=movieId
+    urll=get_movie_trailer('ccfc2af2a0cd4597bf0472fab1af2f02',pre)
     print(movieidd)
-    return render_template('ratingg.html', idd=idd,movieidd=movieidd)
+    return render_template('ratingg.html', idd=idd,movieidd=movieidd,title=title,poster_url=poster_url,urll=urll)
 @app.route('/allfilms/<int:id>/<int:movieId>/commit', methods=['POST'])
 def ratee(id,movieId):
     rating = request.form['rating']
-    timestamp = request.form['timestamp']
+    
+    # ts stores the time in seconds
+    ts = time.time()
+ 
+    # print the current timestamp
+    print(ts)
+    timestamp = ts
     # Store the ratings in a database or file
     # For this example, we will just print them to the console
     userId=id 
@@ -106,11 +249,11 @@ def rate_movies():
     return render_template('index.html', userId=userId)
 
 
-@app.route('/recom', methods=['POST'])
+@app.route('/recom/<int:idd>', methods=['GET'])
 
-def recommand_movies():
-    userId = request.form['userId']
-    userIdd=int(userId)
+def recommand_movies(idd):
+    idd=idd
+    userIdd=int(idd)
     rating = pd.read_csv('/home/adel/Desktop/kn/ratings.csv')
     movie = pd.read_csv('/home/adel/Desktop/kn/movies.csv')
     df = pd.merge(rating, movie, on='movieId')
@@ -150,7 +293,7 @@ def recommand_movies():
 
     predictions['urls']=poster_urls        
     print(predictions)
-    return render_template('listrecomendations.html', predictions=predictions,id=userId,poster_urls=poster_urls)
+    return render_template('listrecomendations.html', predictions=predictions,id=idd,poster_urls=poster_urls)
 
 @app.route('/diver/<int:idd>')
 
@@ -170,11 +313,29 @@ def diversification(idd):
     all_predicted_ratings = np.dot(np.dot(U, sigma), Vt) + ratings_mean.reshape(-1, 1)
     preds_df = pd.DataFrame(all_predicted_ratings, columns = mtrx_df.columns)
     already_rated, predictions = recommend_movies(preds_df,idd, movie, rating, 20)
-    
-    diversifie=suggest_diverse_movies(already_rated,predictions)
-    diversified=diversifie[1:10]
-    print(diversified)
+    recom=dataframe_to_tuple_list(predictions)
 
+    # Calcul du score de diversité pour chaque film
+    diversity_scores = []
+    for i in range(len(recom)):
+        genres_i = set(recom[i][2].split("|"))
+        diversity_sum = 0
+        for j in range(len(recom)):
+            if i != j:
+                genres_j = set(recom[j][2].split("|"))
+                distance = len(genres_i.symmetric_difference(genres_j))
+                diversity_sum += distance
+        diversity_score = diversity_sum / (len(recom) - 1)
+        diversity_scores.append((recom[i][0], recom[i][1], recom[i][2], diversity_score))
+
+    # Trier les films par ordre décroissant de score de diversité et afficher les 10 premiers
+    print('ici')
+    
+    sorted_diversity_scores = sorted(diversity_scores, key=lambda x: x[3], reverse=True)
+   
+    print(tuple_list_to_dataframe(sorted_diversity_scores))
+    diversified=tuple_list_to_dataframe(sorted_diversity_scores)
+  
     poster_urls = []
     api_key = 'ccfc2af2a0cd4597bf0472fab1af2f02'  # Replace with your actual TMDb API key
 

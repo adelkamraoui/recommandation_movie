@@ -1,6 +1,8 @@
-    
-
-
+import math   
+import uuid
+import csv
+import random
+from collections import Counter, defaultdict
 import random
 import re
 from sklearn.metrics.pairwise import pairwise_distances
@@ -66,6 +68,7 @@ def recommend_movies(preds_df, userId, movie, ratings_df, num_recommendations=5)
 
     return user_rated, recommendations
 
+"""
 rating = pd.read_csv('/home/adel/Desktop/kn/ratings.csv')
 movie = pd.read_csv('/home/adel/Desktop/kn/movies.csv')
 df = pd.merge(rating, movie, on='movieId')
@@ -84,12 +87,13 @@ preds_df = pd.DataFrame(all_predicted_ratings, columns = mtrx_df.columns)
 
 
 
-user_rated, recommendations = recommend_movies(preds_df, 616, movie=movie, ratings_df=rating, num_recommendations=10)
+user_rated, recommendations = recommend_movies(preds_df, 616, movie=movie, ratings_df=rating, num_recommendations=20)
 print(user_rated)
 print(recommendations)
 moviee=movie[0:10]
 movie_data=movie
 user_ratings=user_rated
+"""
 def mmr(user_ratings, movie_data, n_recommendations, lambda_param):
     # Create a matrix of user ratings with movieId as columns and userId as rows
     ratings_matrix = user_ratings.pivot(index='userId', columns='movieId', values='rating').fillna(0)
@@ -160,8 +164,8 @@ def suggest_diverse_movies(user_ratings, all_movies):
 
     return pd.DataFrame(selected_movies)
 # print recommended movies
-recommended_movies=suggest_diverse_movies(user_rated,recommendations)
-print(recommended_movies)
+#recommended_movies=suggest_diverse_movies(user_rated,recommendations)
+#print(recommended_movies)
 api_key = 'ccfc2af2a0cd4597bf0472fab1af2f02'  # Replace with your actual TMDb API key
 
 
@@ -177,3 +181,137 @@ def remove_year(title):
         str: The title string without year in parentheses.
     """
     return re.sub(r'\s*\(\d{4}\)', '', title)
+
+
+
+def diversity_score(movie_list):
+    genre_dict = {}
+    for movie in movie_list:
+        for genre in movie['genres']:
+            print(genre)
+            if genre in genre_dict:
+                genre_dict[genre] += 1
+            else:
+                genre_dict[genre] = 1
+    total_movies = len(movie_list)
+    diversity = 0
+    for genre in genre_dict:
+        p = genre_dict[genre] / total_movies
+        diversity -= p * math.log(p)
+    return diversity
+
+def genre_diversity_score(movie, movie_list):
+    other_genres = []
+    for other_movie in movie_list:
+        if other_movie != movie:
+            other_genres += other_movie['genres']
+    other_genres = list(set(other_genres))
+    new_list = []
+    for genre in other_genres:
+        count = 0
+        for other_movie in movie_list:
+            if other_movie != movie and genre in other_movie['genres']:
+                count += 1
+        new_list.append(count)
+    return (diversity_score(new_list) - diversity_score([movie['genres']])) / (len(movie_list) - 1)
+
+def diversify_movie_list(movie_list):
+    for movie in movie_list:
+        movie['genre_diversity_score'] = genre_diversity_score(movie, movie_list)
+    sorted_list = sorted(movie_list, key=lambda x: x['genre_diversity_score'])
+    return sorted_list
+
+
+recommendationss = [
+    (1, "Toy Story", "Animation|Children|Comedy"),
+    (2, "Jumanji", "Adventure|Children|Fantasy"),
+    (3, "Grumpier Old Men", "Comedy|Romance"),
+    (4, "Waiting to Exhale", "Comedy|Drama|Romance"),
+    (5, "Father of the Bride Part II", "Comedy"),
+    (6, "Heat", "Action|Crime|Thriller"),
+    (7, "Sabrina", "Comedy|Romance"),
+    (8, "Tom and Huck", "Adventure|Children"),
+    (9, "Sudden Death", "Action"),
+    (10, "GoldenEye", "Action|Adventure|Thriller")
+]
+def tuple_list_to_dataframe(tuple_list):
+    """
+    Converts a list of tuples in the format (movieId, title, genres) to a
+    pandas DataFrame with columns "movieId", "title", and "genres".
+    """
+    df = pd.DataFrame(tuple_list, columns=['movieId', 'title', 'genres','diversity_score'])
+    return df
+def dataframe_to_tuple_list(df):
+    """
+    Converts a pandas DataFrame with columns "movieId", "title", and "genres"
+    to a list of tuples in the format (movieId, title, genres).
+    """
+    tuple_list = []
+    for idx, row in df.iterrows():
+        tuple_list.append((row['movieId'], row['title'], row['genres']))
+    return tuple_list
+
+recom=recommendationss
+
+# Calcul du score de diversité pour chaque film
+diversity_scores = []
+for i in range(len(recom)):
+    genres_i = set(recom[i][2].split("|"))
+    diversity_sum = 0
+    for j in range(len(recom)):
+        if i != j:
+            genres_j = set(recom[j][2].split("|"))
+            distance = len(genres_i.symmetric_difference(genres_j))
+            diversity_sum += distance
+    diversity_score = diversity_sum / (len(recom) - 1)
+    diversity_scores.append((recom[i][0], recom[i][1], recom[i][2], diversity_score))
+
+# Trier les films par ordre décroissant de score de diversité et afficher les 10 premiers
+print(diversity_scores)
+sorted_diversity_scores = sorted(diversity_scores, key=lambda x: x[3], reverse=True)
+for i in range(10):
+    print(sorted_diversity_scores[i][1], sorted_diversity_scores[i][3])
+
+print(tuple_list_to_dataframe(sorted_diversity_scores))
+
+
+def get_movie_title(movie_id):
+    with open('movies.csv', newline='', encoding='utf-8') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            if int(row['movieId']) == movie_id:
+                return row['title']
+    return None  # Movie id not found in the CSV file
+import requests
+import json
+import webbrowser
+
+def get_movie_trailer(api_key, movie_title):
+    # Construct the API request URL
+    search_url = f"https://api.themoviedb.org/3/search/movie?api_key={api_key}&query={movie_title}"
+
+    # Send the API request and parse the response
+    response = requests.get(search_url)
+    data = json.loads(response.text)
+    
+    if not data["results"] or data["results"][0]["title"].lower() != movie_title.lower():
+        return None
+
+    # Extract the movie ID of the first search result
+    movie_id = data["results"][0]["id"]
+
+    # Construct the API request URL to get the movie details
+    movie_url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={api_key}&append_to_response=videos"
+
+    # Send the API request and parse the response
+    response = requests.get(movie_url)
+    data = json.loads(response.text)
+
+    # Extract the trailer key for the first video result
+    trailer_key = data["videos"]["results"][0]["key"]
+
+    # Construct the trailer URL on YouTube
+    trailer_url = f"https://www.youtube.com/embed/{trailer_key}"
+   
+    # Return the movie title and trailer URL as a tuple
+    return (trailer_url)
