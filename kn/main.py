@@ -1,4 +1,5 @@
 from flask import Flask, request, render_template
+from pandas_profiling import ProfileReport
 # Necessary libraries
 import PySimpleGUI as sg
 import numpy as np
@@ -14,16 +15,19 @@ import csv
 import movieposters as mp
 import urllib.request
 from PIL import Image
+import ydata_profiling
 from PIL import Image, ImageTk
 from urllib import request
 import PySimpleGUI as sg
 import os
 from flask import Flask, render_template, request
-from test import recommend_movies,remove_year,suggest_diverse_movies,tuple_list_to_dataframe,dataframe_to_tuple_list,get_movie_title,get_movie_trailer
+from test import recommend_movies,remove_year,suggest_diverse_movies,tuple_list_to_dataframe,dataframe_to_tuple_list,get_movie_title,get_movie_trailer,get_movie_description,get_movie_url_from_csv
 import requests
 import time
 from flask import Flask, render_template, request, session, redirect, url_for
-
+import hashlib
+import matplotlib.pyplot as plt
+from IPython.display import display, HTML
 app = Flask(__name__,template_folder='template')
 app.secret_key = 'secret_key'
 field_names = ['userId', 'movieId', 'rating',
@@ -37,7 +41,6 @@ with open('user_credentials.csv') as f:
         users[username] = (user_id, password)
 
 
-
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     with open('user_credentials.csv') as f:
@@ -45,11 +48,10 @@ def login():
                 user_id, username, password = line.strip().split(',')
                 users[username] = (user_id, password)
 
-        
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        if username in users and users[username][1] == password:
+        if username in users and hashlib.sha256(password.encode()).hexdigest() == users[username][1]:
             session['username'] = username
             session['user_id'] = users[username][0]
             return redirect(url_for('main'))
@@ -58,7 +60,6 @@ def login():
             return render_template('login.html', error=error)
     else:
         return render_template('login.html')
-
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -85,7 +86,7 @@ def register():
         # Add the new user to the CSV file
         with open('user_credentials.csv', 'a', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow([user_id, username, password])
+            writer.writerow([user_id, username, hashlib.sha256(password.encode()).hexdigest()])
         
         # Redirect the user to the login page
         return redirect(url_for('showfilms', id=user_id))
@@ -105,6 +106,12 @@ def main():
         eda_rating = pd.DataFrame(df.groupby('title')['rating'].mean())
         eda_rating['count of ratings'] = pd.DataFrame(df.groupby('title')['rating'].count())
         mtrx_df = rating.pivot(index = 'userId', columns ='movieId', values = 'rating').fillna(0)
+        print('avant')
+        print(mtrx_df.head(30))
+        mtrx_df.head(30)
+        
+
+
         mtrx = mtrx_df.to_numpy()
         ratings_mean = np.mean(mtrx, axis = 1)
         normalized_mtrx = mtrx - ratings_mean.reshape(-1, 1)
@@ -112,6 +119,9 @@ def main():
         sigma = np.diag(sigma)
         all_predicted_ratings = np.dot(np.dot(U, sigma), Vt) + ratings_mean.reshape(-1, 1)
         preds_df = pd.DataFrame(all_predicted_ratings, columns = mtrx_df.columns)
+        print('apres')
+        print(preds_df.head(10))
+        preds_df.head(10)
         already_rated, predictions = recommend_movies(preds_df,userIdd, movie, rating, 10)
         
         print(already_rated.head(10))
@@ -122,19 +132,8 @@ def main():
         api_key = 'ccfc2af2a0cd4597bf0472fab1af2f02'  # Replace with your actual TMDb API key
 
         for prediction in predictions['title']:
-            pre=remove_year(prediction)
-            url = f'https://api.themoviedb.org/3/search/movie?api_key={api_key}&query={pre}'
-            response = requests.get(url)
-            data = response.json()
-            if data['total_results'] > 0:
-                poster_path = data['results'][0]['poster_path']
-                poster_url = f'https://image.tmdb.org/t/p/w500/{poster_path}'
-                print("+1")
-                poster_urls.append(poster_url)
-            else:
-                poster_url = 'https://i.quotev.com/b2gtjqawaaaa.jpg'  # Replace with your actual error image path
-                poster_urls.append(poster_url)    
-                print("+1 taa errror")
+            poster_url=get_movie_url_from_csv('/home/adel/Desktop/kn/movieswithurl.csv', prediction)
+            poster_urls.append(poster_url)
 
         predictions['urls']=poster_urls        
         print(predictions)
@@ -206,7 +205,8 @@ def ratingtemp(id,movieId):
     movieidd=movieId
     urll=get_movie_trailer('ccfc2af2a0cd4597bf0472fab1af2f02',pre)
     print(movieidd)
-    return render_template('ratingg.html', idd=idd,movieidd=movieidd,title=title,poster_url=poster_url,urll=urll)
+    description=get_movie_description(pre,'ccfc2af2a0cd4597bf0472fab1af2f02')
+    return render_template('ratingg.html', idd=idd,movieidd=movieidd,title=title,poster_url=poster_url,urll=urll,description=description)
 @app.route('/allfilms/<int:id>/<int:movieId>/commit', methods=['POST'])
 def ratee(id,movieId):
     rating = request.form['rating']
@@ -312,8 +312,13 @@ def diversification(idd):
     sigma = np.diag(sigma)
     all_predicted_ratings = np.dot(np.dot(U, sigma), Vt) + ratings_mean.reshape(-1, 1)
     preds_df = pd.DataFrame(all_predicted_ratings, columns = mtrx_df.columns)
-    already_rated, predictions = recommend_movies(preds_df,idd, movie, rating, 20)
-    recom=dataframe_to_tuple_list(predictions)
+    '''
+    already_rated, li1 = recommend_movies(preds_df, idd, movie, rating, 20)
+    pertinences = []
+
+    
+
+    recom = dataframe_to_tuple_list(li1)
 
     # Calcul du score de diversité pour chaque film
     diversity_scores = []
@@ -323,7 +328,51 @@ def diversification(idd):
         for j in range(len(recom)):
             if i != j:
                 genres_j = set(recom[j][2].split("|"))
-                distance = len(genres_i.symmetric_difference(genres_j))
+                distance = 1 - (len(genres_i.intersection(genres_j)) / len(genres_i.union(genres_j)))
+                diversity_sum += distance
+            diversity_score = diversity_sum / (len(recom) - 1)
+            diversity_scores.append((recom[i][0], recom[i][1], recom[i][2], diversity_score))
+
+        # Trier les films par ordre décroissant de score de diversité et afficher les 10 premiers
+        sorted_diversity_scores = sorted(diversity_scores, key=lambda x: x[3], reverse=True)
+        diversified = tuple_list_to_dataframe(sorted_diversity_scores)
+        diversified = diversified.head(10)
+        
+        
+        # Calculer le nombre de films communs entre la liste initiale et la liste diversifiée
+        films_communs = set(li1['title']).intersection(set(diversified10['title']))
+
+        nb_films_communs = len(films_communs)
+
+        # Calculer le pourcentage de pertinence
+        pourcentage_pertinence = nb_films_communs / len(li1) * 100
+        # Afficher le résultat
+        print("La pertinence de la liste diversifiée avec {} films est de : {:.2f}%".format(n, pourcentage_pertinence))
+
+        # Ajouter la pertinence à la liste
+        pertinences.append(pourcentage_pertinence)
+    
+    print(pertinences)
+    plt.plot(range(10, 51), pertinences)
+    plt.xlabel('Nombre de films recommandés')
+    plt.ylabel('Pertinence (%)')
+    plt.title('Évolution de la pertinence en fonction du nombre de films recommandés')
+    plt.show()    
+      '''                                                                                                                      
+    already_rated, list1 = recommend_movies(preds_df,idd, movie, rating, 10)
+   
+    already_rated, predictions = recommend_movies(preds_df,idd, movie, rating, 20)
+    recom=dataframe_to_tuple_list(predictions)
+    
+    # Calcul du score de diversité pour chaque film
+    diversity_scores = []
+    for i in range(len(recom)):
+        genres_i = set(recom[i][2].split("|"))
+        diversity_sum = 0
+        for j in range(len(recom)):
+            if i != j:
+                genres_j = set(recom[j][2].split("|"))
+                distance = 1 - (len(genres_i.intersection(genres_j)) / len(genres_i.union(genres_j)))
                 diversity_sum += distance
         diversity_score = diversity_sum / (len(recom) - 1)
         diversity_scores.append((recom[i][0], recom[i][1], recom[i][2], diversity_score))
@@ -332,27 +381,29 @@ def diversification(idd):
     print('ici')
     
     sorted_diversity_scores = sorted(diversity_scores, key=lambda x: x[3], reverse=True)
-   
+    
+    
     print(tuple_list_to_dataframe(sorted_diversity_scores))
     diversified=tuple_list_to_dataframe(sorted_diversity_scores)
-  
+    '''
+    print('look adel i made it')
+    reco_initiale=list1
+    reco_diversifiee=diversified
+    films_communs = set(reco_initiale).intersection(set(reco_diversifiee))
+    nb_films_communs = len(films_communs)
+
+    # Calculez le pourcentage de pertinence
+    pourcentage_pertinence = nb_films_communs / len(reco_initiale) * 100
+
+    print("La pertinence de la liste diversifiée est de : {:.2f}%".format(pourcentage_pertinence))
+    '''
     poster_urls = []
     api_key = 'ccfc2af2a0cd4597bf0472fab1af2f02'  # Replace with your actual TMDb API key
-
+    diversified = diversified.head(10)
     for diversifiedd in diversified['title']:
-        pre=remove_year(diversifiedd)
-        url = f'https://api.themoviedb.org/3/search/movie?api_key={api_key}&query={pre}'
-        response = requests.get(url)
-        data = response.json()
-        if data['total_results'] > 0:
-            poster_path = data['results'][0]['poster_path']
-            poster_url = f'https://image.tmdb.org/t/p/w500/{poster_path}'
-            print("+1")
+            poster_url=get_movie_url_from_csv('/home/adel/Desktop/kn/movieswithurl.csv', diversifiedd)
             poster_urls.append(poster_url)
-        else:
-            poster_url = 'https://i.quotev.com/b2gtjqawaaaa.jpg'  # Replace with your actual error image path
-            poster_urls.append(poster_url)    
-            print("+1 taa errror")
+    
 
     diversified['urls']=poster_urls        
     
