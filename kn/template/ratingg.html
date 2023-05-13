@@ -40,7 +40,7 @@
         input[type="radio"] {
             display: none;
         }
-
+        
         .stars {
             display: flex;
             justify-content: center;
@@ -48,6 +48,14 @@
             margin-bottom: 10px;
             
             flex-direction: row-reverse;
+        }
+        .description {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 10px;
+            
+            
         }
 
         .stars label {
@@ -114,11 +122,18 @@ img:hover {
 
 <body>
     <h1> {{title}}</h1>
+    <div class="description">
+   
+    </div>
     <img src="{{poster_url}}" alt="{{title}} Poster">
-    <div>
+    
         <iframe width="560" height="315" src="{{urll}}" title="{{ title }} Trailer" frameborder="0" allowfullscreen></iframe>
     </div>
-    
+    <div class="description">
+    <h2>Desctiption</h2>
+    {{description}}
+</div>
+    <div> 
     <form action="/allfilms/{{idd}}/{{movieidd}}/commit" method="POST">
         <label for="stars"></label>
         <div class="stars">
