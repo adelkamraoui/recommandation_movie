@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Factorisation</title>
+</head>
+<body>
+    <h2>Avant</h2>
+    {{ mtrx_df_html|safe }}
+    
+    <h2>Après</h2>
+    {{ preds_df_html|safe }}
+
+    <div>
+        {% if page > 1 %}
+            <a href="?page={{ page - 1 }}">Previous</a>
+        {% endif %}
+
+        {% if page < num_pages %}
+            <a href="?page={{ page + 1 }}">Next</a>
+        {% endif %}
+    </div>
+</body>
+</html>

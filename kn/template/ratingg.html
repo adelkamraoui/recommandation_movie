@@ -40,7 +40,7 @@
         input[type="radio"] {
             display: none;
         }
-
+        
         .stars {
             display: flex;
             justify-content: center;
@@ -49,6 +49,18 @@
             
             flex-direction: row-reverse;
         }
+        .description {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        margin: 20px; /* Adds margin to create space away from edges */
+        padding: 20px; /* Adds padding to create a gray rectangle */
+        background-color: #ccc; /* Sets the background color to gray */
+        text-align: center;
+        border-radius: 10px; /* Adds rounded corners to the rectangle */
+    }
+        
 
         .stars label {
             font-size: 100px;
@@ -114,11 +126,18 @@ img:hover {
 
 <body>
     <h1> {{title}}</h1>
+    <div class="title">
+   
+    </div>
     <img src="{{poster_url}}" alt="{{title}} Poster">
-    <div>
+    
         <iframe width="560" height="315" src="{{urll}}" title="{{ title }} Trailer" frameborder="0" allowfullscreen></iframe>
     </div>
-    
+    <div class="description">
+    <h2>Desctiption</h2>
+    {{description}}
+</div>
+    <div> 
     <form action="/allfilms/{{idd}}/{{movieidd}}/commit" method="POST">
         <label for="stars"></label>
         <div class="stars">
