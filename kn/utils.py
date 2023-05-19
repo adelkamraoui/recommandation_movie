@@ -191,7 +191,7 @@ def dataframe_to_tuple_list(df):
     return tuple_list
 
 def get_movie_title(movie_id):
-    with open('movies.csv', newline='', encoding='utf-8') as csvfile:
+    with open('tables/movies.csv', newline='', encoding='utf-8') as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
             if int(row['movieId']) == movie_id:

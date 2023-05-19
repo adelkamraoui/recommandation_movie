@@ -1,6 +1,7 @@
 import requests
 import json
 import csv
+from utils import*
 
 api_key = 'ccfc2af2a0cd4597bf0472fab1af2f02'  # Replace with your actual TMDb API key
 

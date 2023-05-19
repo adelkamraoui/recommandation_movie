@@ -1,13 +1,16 @@
 from flask import Flask, render_template, request, session, redirect, url_for
-import requests, csv
+import requests, csv, time
+from csv import DictWriter
 import numpy as np
 from final_algo import *
+from utils import *
+from APIs import *
 
 field_names = ['userId', 'movieId', 'rating','timestamp']	
 
 def get_users():
     users = {}
-    with open('user_credentials.csv') as f:
+    with open('tables/user_credentials.csv') as f:
         for line in f.readlines():
             user_id, username, password = line.strip().split(',')
             users[username] = (user_id, password)
@@ -76,7 +79,7 @@ def get_app():
             
             rating, movie= load_data()
             mtrx_df, mtrx_np= get_matrix(rating)
-            normalized_mtrx, transform_back= normalize_matrix(mtrx)
+            normalized_mtrx, transform_back= normalize_matrix(mtrx_np)
             all_predicted_ratings= apply_factorization(normalized_mtrx)
             all_predicted_ratings= transform_back(all_predicted_ratings)
             
@@ -99,7 +102,7 @@ def get_app():
 
     @app.route('/allfilms/<int:id>')
     def showfilms(id):
-        movie = pd.read_csv('/home/adel/Desktop/kn/movieswithurl.csv')
+        movie = pd.read_csv('tables/movieswithurl.csv')
         search = request.args.get('search', '')
         if search:
             idd=id
@@ -188,7 +191,7 @@ def get_app():
 
     @app.route('/rate')
     def rate_movies():
-        rating = pd.read_csv('/home/adel/Desktop/kn/ratings.csv')
+        rating = pd.read_csv('tables/ratings.csv')
         largest_id = rating['userId'].max()
         userId=largest_id+1
         # Store the ratings in a database or file
@@ -203,7 +206,7 @@ def get_app():
 
         rating, movie= load_data()
         mtrx_df, mtrx_np= get_matrix(rating)
-        normalized_mtrx, transform_back= normalize_matrix(mtrx)
+        normalized_mtrx, transform_back= normalize_matrix(mtrx_np)
         all_predicted_ratings= apply_factorization(normalized_mtrx)
         all_predicted_ratings= transform_back(all_predicted_ratings)
         
@@ -220,7 +223,7 @@ def get_app():
         
         rating, movie= load_data()
         mtrx_df, mtrx_np= get_matrix(rating)
-        normalized_mtrx, transform_back= normalize_matrix(mtrx)
+        normalized_mtrx, transform_back= normalize_matrix(mtrx_np)
         all_predicted_ratings= apply_factorization(normalized_mtrx)
         all_predicted_ratings= transform_back(all_predicted_ratings)
         preds_df = pd.DataFrame(all_predicted_ratings, columns = mtrx_df.columns)

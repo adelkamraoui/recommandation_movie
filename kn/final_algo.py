@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+from scipy.sparse.linalg import svds
+from utils import*
 
 def load_data():
     rating = pd.read_csv('tables/ratings.csv')
