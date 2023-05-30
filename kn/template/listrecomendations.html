@@ -51,9 +51,29 @@
 		a:hover {
 			text-decoration: underline;
 		}
+        .disconnect-button {
+            text-align: right;
+            margin-top: 20px;
+            margin-right: 20px;
+        }
+        .disconnect-button button {
+            background-color: #f44336;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .disconnect-button button:hover {
+            background-color: #d32f2f;
+        }
 	</style>
 </head>
 <body>
+    <div class="disconnect-button">
+        <button onclick="confirmDisconnect()">Disconnect</button>
+    </div>
 	<h1>Films Recommended for You</h1>
 	<table>
 		<thead>
@@ -77,5 +97,16 @@
 	</table>
 	<a href="/allfilms/{{id}}">Rate New Films</a>
 	<a href="/diver/{{id}}">Diversify Your Films</a>
-</body>
-</html>
+
+    <script>
+        function confirmDisconnect() {
+            var confirmDisconnect = confirm("Are you sure you want to disconnect?");
+            if (confirmDisconnect) {
+                // Add your disconnect logic here
+                // For example, redirect the user to a logout page or perform any necessary cleanup
+                // You can replace the window.location.href with the appropriate URL
+
+            window.location.href = "/login";
+        }
+    }
+</script>

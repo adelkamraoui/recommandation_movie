@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 
 
+CSV_FILE = '/home/adel/Desktop/kn/movies.csv'
 def get_next_id(CSV_FILE):
     # Lecture du fichier CSV et récupération de la valeur maximale de movieId
     with open(CSV_FILE, 'r') as file:
