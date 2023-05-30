@@ -5,15 +5,15 @@ import numpy as np
 from final_algo import *
 from utils import *
 from APIs import *
-
+import hashlib
 field_names = ['userId', 'movieId', 'rating','timestamp']	
 
 def get_users():
     users = {}
-    with open('tables/user_credentials.csv') as f:
-        for line in f.readlines():
-            user_id, username, password = line.strip().split(',')
-            users[username] = (user_id, password)
+    with open('/home/adel/Desktop/finall/kn/tables/newuser.csv') as f:
+       for line in f.readlines():
+        user_id, username, password,role,email = line.strip().split(',')
+        users[username] = (user_id, password,role,email)
     return users
 
 def get_app():
@@ -27,10 +27,15 @@ def get_app():
         if request.method == 'POST':
             username = request.form['username']
             password = request.form['password']
-            if username in users and users[username][1] == password:
+            if username in users and hashlib.sha256(password.encode()).hexdigest() == users[username][1]:
                 session['username'] = username
                 session['user_id'] = users[username][0]
-                return redirect(url_for('main'))
+                
+                if users[username][2] == 'admin':
+                    print('admin salem alikoum')
+                    return redirect(url_for('admin'))
+                else:
+                    return redirect(url_for('main'))
             else:
                 error = 'Invalid username or password'
                 return render_template('login.html', error=error)
@@ -39,7 +44,7 @@ def get_app():
 
     @app.route('/register', methods=['GET', 'POST'])
     def register():
-        with open('user_credentials.csv', 'r') as f:
+        with open('/home/adel/Desktop/finall/kn/tables/newuser.csv', 'r') as f:
             reader = csv.reader(f)
             headers = next(reader)
             max_id = max(int(row[0]) for row in reader)
@@ -49,9 +54,10 @@ def get_app():
             user_id = max_id + 1
             username = request.form['username']
             password = request.form['password']
-            
+            email = request.form['email']  # Récupérer la valeur du champ d'e-mail
+            role = 'normal'
             # Check if the username is already taken
-            with open('user_credentials.csv', 'r') as f:
+            with open('/home/adel/Desktop/finall/kn/tables/newuser.csv', 'r') as f:
                 reader = csv.reader(f)
                 headers = next(reader)
                 for row in reader:
@@ -59,10 +65,11 @@ def get_app():
                         error = f'Username {username} is already taken'
                         return render_template('signin.html', error=error)
             
-            # Add the new user to the CSV file
-            with open('user_credentials.csv', 'a', newline='') as f:
+            # Ajouter le nouvel utilisateur au fichier CSV
+            with open('/home/adel/Desktop/finall/kn/tables/newuser.csv', 'a', newline='') as f:
                 writer = csv.writer(f)
-                writer.writerow([user_id, username, password])
+                writer.writerow([user_id, username, hashlib.sha256(password.encode()).hexdigest(), role, email])
+        
             
             # Redirect the user to the login page
             return redirect(url_for('showfilms', id=user_id))
@@ -99,6 +106,87 @@ def get_app():
     @app.route('/recomfilms')
     def enteridrecom():
         return render_template('recommand.html')
+    @app.route('/admin')
+    def admin():
+        return render_template('admin.html')
+
+    @app.route('/Factorisation')
+    def Factorisation():
+        rating = pd.read_csv('/home/adel/Desktop/finall/kn/tables/ratings.csv')
+        movie = pd.read_csv('/home/adel/Desktop/finall/kn/tables/movies.csv')
+        df = pd.merge(rating, movie, on='movieId')
+        eda_rating = pd.DataFrame(df.groupby('title')['rating'].mean())
+        eda_rating['count of ratings'] = pd.DataFrame(df.groupby('title')['rating'].count())
+        mtrx_df = rating.pivot(index='userId', columns='movieId', values='rating').fillna(0)
+
+        page = request.args.get('page', default=1, type=int)
+        chunk_size = 10  # Number of rows per page
+        start_idx = (page - 1) * chunk_size
+        end_idx = start_idx + chunk_size
+
+        mtrx_df_page = mtrx_df.iloc[start_idx:end_idx]
+        mtrx_df_html = mtrx_df_page.to_html()
+
+        mtrx = mtrx_df.to_numpy()
+        ratings_mean = np.mean(mtrx, axis=1)
+        normalized_mtrx = mtrx - ratings_mean.reshape(-1, 1)
+        U, sigma, Vt = svds(normalized_mtrx, k=50)
+        sigma = np.diag(sigma)
+        all_predicted_ratings = np.dot(np.dot(U, sigma), Vt) + ratings_mean.reshape(-1, 1)
+        preds_df = pd.DataFrame(all_predicted_ratings, columns=mtrx_df.columns)
+
+        preds_df_page = preds_df.iloc[start_idx:end_idx]
+        preds_df_html = preds_df_page.to_html()
+
+        num_pages = int(np.ceil(len(mtrx_df) / chunk_size))
+
+        return render_template('factorisation_en_temps_reel.html', mtrx_df_html=mtrx_df_html, preds_df_html=preds_df_html, page=page, num_pages=num_pages)
+
+
+    @app.route('/ajoutfilm', methods=['GET', 'POST'])
+    def ajoutfilm():
+        
+        if request.method == 'POST':
+            # Récupérer les données du formulaire
+            title = request.form['title']
+            genres = request.form['genres']
+            CSV_FILE = '/home/adel/Desktop/finall/kn/tables/movies.csv'
+            # Générer l'ID du film
+            movie_id = get_next_id(CSV_FILE)
+            print('je suis le maxxxxxx')
+            print(movie_id)
+            # Ajouter le nouveau film au fichier CSV
+            
+            with open(CSV_FILE, 'a', newline='') as file:
+                writer = csv.writer(file)
+                writer.writerow([movie_id, title, genres])
+        
+            return 'Film ajouté avec succès !'
+        
+        
+        return render_template('ajoutfilm.html')
+    @app.route('/supprimefilm', methods=['GET', 'POST'])
+    def supprimefilm():
+        if request.method == 'POST':
+            # Get the film name from the form
+            film_name = request.form['film_name']
+
+            # Delete the film from the CSV file
+            CSV_FILE = '/home/adel/Desktop/finall/kn/tables/movies.csv'
+            updated_rows = []
+            with open(CSV_FILE, 'r') as file:
+                reader = csv.reader(file)
+                for row in reader:
+                    if row[1] != film_name:  # Exclude the film with the specified name
+                        updated_rows.append(row)
+
+            with open(CSV_FILE, 'w', newline='') as file:
+                writer = csv.writer(file)
+                writer.writerows(updated_rows)
+
+            return 'Film deleted successfully!'
+
+        return render_template('supprimefilm.html')
 
     @app.route('/allfilms/<int:id>')
     def showfilms(id):
@@ -176,11 +264,11 @@ def get_app():
                 'timestamp':timestamp}
     
 
-        with open('ratings.csv', 'a') as f_object:
+        with open('/home/adel/Desktop/recomreda/recommandation_movie-master/kn/tables/ratings.csv', 'a') as f_object:
 
             dictwriter_object = DictWriter(f_object, fieldnames=field_names)
             dictwriter_object.writerow(dict)
-    
+            print('done')
         # Close the file object
         f_object.close()
         print(f"{userId}: {rating}/10")
